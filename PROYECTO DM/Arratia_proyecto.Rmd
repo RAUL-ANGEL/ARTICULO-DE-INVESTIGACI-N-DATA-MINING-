@@ -1,0 +1,84 @@
+---
+title: "PROYECTO"
+output: html_document
+date: "2024-06-26"
+---
+
+```{r}
+
+library(sf)
+library(dplyr)
+library(haven) 
+library(labelled)
+library(readxl)
+library(ggplot2)
+
+df <- read_xlsx('BBDD Clientes Noviembre 2023.xlsx', sheet = 'BBDD Clientes')
+
+
+# Procesar el dataframe para obtener la última parte de la columna 'DESCRIPCION_U2000' y el número de cuenta del servicio
+df_processed <- df %>%
+  mutate(
+    parts = strsplit(as.character(DESCRIPCION_U2000), "_"),
+    last_part = sapply(parts, function(x) ifelse(length(x) > 0, tail(x, n = 1), NA)),
+    service_account = sapply(parts, function(x) ifelse(length(x) > 1, x[2], NA))
+  ) %>%
+  filter(!is.na(last_part) & grepl("^[0-9]+M$", last_part)) %>%
+  mutate(last_part_numeric = as.numeric(gsub("M", "", last_part)))
+
+# Seleccionar la columna necesaria para el clustering
+data_for_clustering <- df_processed[, "last_part_numeric", drop = FALSE]
+
+# Definir el número de clústeres (k)
+k <- 3
+
+# Aplicar K-means
+kmeans_result <- kmeans(data_for_clustering, centers = k)
+
+# Ver los resultados del clustering
+kmeans_result
+
+# Añadir las etiquetas de clústeres a los datos originales
+df_processed <- df_processed %>%
+  mutate(cluster = kmeans_result$cluster)
+
+# Ver las primeras filas del dataframe con los clústeres asignados
+head(df_processed)
+
+# Resumen de los clústeres
+summary(df_processed$cluster)
+
+# Visualizar los clústeres (opcional, dependiendo de la dimensionalidad de los datos)
+plot(data_for_clustering, col = kmeans_result$cluster)
+
+# Contar las frecuencias de cada clúster
+cluster_freq <- df_processed %>% 
+  group_by(cluster) %>%
+  summarize(freq = n())
+
+# Crear el gráfico de barras de frecuencias de clústeres
+ggplot(cluster_freq, aes(x = factor(cluster), y = freq)) +
+  geom_bar(stat = "identity", fill = "skyblue", color = "black") +
+  labs(title = "Frecuencias de Clústeres",
+       x = "Clúster",
+       y = "Frecuencia") +
+  theme_minimal()
+
+```
+
+```{r}
+
+# Seleccionar la columna necesaria para el clustering jerárquico
+data_for_clustering <- df_processed[, "last_part_numeric", drop = FALSE]
+
+# Calcular la matriz de distancias
+dist_matrix <- dist(data_for_clustering)
+
+# Aplicar el clustering jerárquico
+hclust_result <- hclust(dist_matrix, method = "ward.D2")
+
+# Visualizar el dendrograma
+plot(hclust_result, hang = -1, main = "Dendrograma de Clustering Jerárquico")
+
+```
+
